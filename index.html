@@ -314,6 +314,54 @@ a{color:inherit;}
 }
 @keyframes sheetUp{ from{transform:translateY(24px); opacity:.6;} to{transform:translateY(0); opacity:1;} }
 
+/* ============ Dashboard hero / countdown ============ */
+.dash-hero-grid{grid-template-columns:1.3fr 1fr; gap:18px;}
+.hero-card{display:flex; flex-direction:column;}
+.hero-title{font-family:var(--font-display); font-weight:800; font-size:26px; letter-spacing:-0.02em; line-height:1.15;}
+.hero-sub{color:var(--text-2); font-size:12.5px; margin-top:5px;}
+.hero-ring-zone{display:flex; flex-direction:column; align-items:center; gap:14px; margin:22px 0 6px;}
+.hero-ring-wrap{
+  position:relative; width:150px; height:150px; flex-shrink:0; background:none; border:none; padding:0; cursor:pointer;
+  -webkit-tap-highlight-color:transparent; transition:transform .12s ease;
+}
+.hero-ring-wrap:active{transform:scale(0.96);}
+.hero-ring-svg{width:100%; height:100%; display:block;}
+.hero-ring-arc{transition:stroke-dashoffset .5s ease;}
+.hero-ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;}
+.hero-ring-num{font-family:var(--font-mono); font-size:38px; font-weight:700; line-height:1; letter-spacing:-0.02em;}
+.hero-ring-label{font-size:11px; color:var(--text-3); font-weight:600; margin-top:3px;}
+.countdown-badge{display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:20px; font-size:12px; font-weight:700; max-width:100%; text-align:center;}
+.hero-notes{margin-top:14px; padding-top:14px; border-top:1px solid var(--border-soft); font-size:12.5px; color:var(--text-2); line-height:1.6;}
+
+@keyframes ringPulseUrgent{ 0%,100%{transform:scale(1);} 50%{transform:scale(1.045);} }
+@keyframes ringGlow{ 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.28);} 50%{box-shadow:0 0 0 10px rgba(220,38,38,0);} }
+.hero-ring-wrap.pulse-urgent{border-radius:50%; animation:ringPulseUrgent 1.8s ease-in-out infinite, ringGlow 1.8s ease-in-out infinite;}
+@keyframes ringGlowSoon{ 0%,100%{box-shadow:0 0 0 0 rgba(234,88,12,0.2);} 50%{box-shadow:0 0 0 8px rgba(234,88,12,0);} }
+.hero-ring-wrap.pulse-soon{border-radius:50%; animation:ringGlowSoon 2.4s ease-in-out infinite;}
+
+@media (max-width:860px){
+  .dash-hero-grid{grid-template-columns:1fr; gap:12px;}
+  .hero-title{font-size:22px;}
+  .hero-ring-wrap{width:132px; height:132px;}
+  .hero-ring-num{font-size:32px;}
+  .hero-ring-zone{margin:18px 0 4px;}
+}
+@media (max-width:520px){
+  .hero-title{font-size:20px;}
+  .hero-ring-wrap{width:120px; height:120px;}
+  .hero-ring-num{font-size:29px;}
+  .countdown-badge{font-size:11.5px; padding:6px 12px;}
+  .hero-sub{font-size:12px;}
+  .itin-row{flex-wrap:wrap;}
+  .itin-row .itin-actions{width:100%; justify-content:flex-end; margin-top:8px;}
+  .itin-row .icon-btn{width:32px !important; height:32px !important;}
+  .contact-field{flex:1 1 90px !important; min-width:0 !important; width:auto !important;}
+}
+
+@media (max-width:860px){
+  .field input,.field select,.field textarea,.contact-field,#global-search,#mobile-global-search{font-size:16px !important;}
+}
+
 @media print{
   #sidebar,#topbar,#fab,.no-print{display:none !important;}
   #app,#main,#view-root{height:auto; overflow:visible; display:block;}
@@ -375,6 +423,7 @@ const NAV_ITEMS = [
     {id:'accommodation', label:'住宿資訊', icon:'building-2'},
   ]},
   {group:'其他', items:[
+    {id:'summary', label:'旅程摘要匯出', icon:'file-output'},
     {id:'notes', label:'筆記', icon:'notebook-pen'},
     {id:'data', label:'資料管理', icon:'database'},
   ]},
@@ -530,13 +579,43 @@ function ensureTripBuckets(tripId){
 function tripBudgetStats(tripId){
   const trip = state.trips.find(t=>t.id===tripId);
   const exp = state.expenses[tripId] || [];
-  const spent = exp.reduce((s,e)=>s+Number(e.amount||0),0);
+  const tripCurrency = trip? trip.currency : 'AUD';
+  let spent = 0, unconverted = 0;
+  exp.forEach(e=>{
+    const amt = Number(e.amount||0);
+    if(!e.currency || e.currency===tripCurrency){ spent += amt; return; }
+    const converted = convertCurrency(amt, e.currency, tripCurrency);
+    if(converted==null){ spent += amt; unconverted++; } else { spent += converted; }
+  });
   const budget = Number(trip? trip.budget:0) || 0;
   const remaining = budget - spent;
   const pct = budget>0 ? Math.min(999, Math.round(spent/budget*100)) : 0;
   const daysUsed = new Set(exp.map(e=>e.date)).size || 1;
   const dailyAvg = spent / daysUsed;
-  return {spent, budget, remaining, pct, dailyAvg, count:exp.length};
+  return {spent, budget, remaining, pct, dailyAvg, count:exp.length, unconverted};
+}
+
+/* ---------------------------- 全域匯率快取（用於跨幣別花費換算） ---------------------------- */
+let RATES_TWD = null; // { AUD:0.045, USD:0.031, TWD:1, ... } 表示 1 TWD 可換多少該幣別
+let ratesLoading = false;
+async function ensureGlobalRates(){
+  if(RATES_TWD || ratesLoading) return;
+  ratesLoading = true;
+  try{
+    const res = await fetch('https://api.frankfurter.app/latest?from=TWD');
+    const data = await res.json();
+    RATES_TWD = Object.assign({TWD:1}, data.rates||{});
+    render(); // 換算完成後重繪目前畫面，讓金額更新為正確換算值
+  }catch(e){ /* 保持 null，退回原始加總 */ }
+  ratesLoading = false;
+}
+function convertCurrency(amount, from, to){
+  if(from===to) return amount;
+  if(!RATES_TWD) return null;
+  const twd = from==='TWD' ? amount : (RATES_TWD[from] ? amount/RATES_TWD[from] : null);
+  if(twd==null) return null;
+  if(to==='TWD') return twd;
+  return RATES_TWD[to] ? twd*RATES_TWD[to] : null;
 }
 
 /* ---------------------------- 種子資料（雪梨＋布里斯本行程） ---------------------------- */
@@ -621,18 +700,22 @@ function seedState(){
     配件:[ mkTodo('太陽眼鏡',false), mkTodo('帽子',false) ],
   };
   s.documents[tripId] = {
-    passport:{name:'', number:'', expiry:''},
+    passport:{name:'Lin Jiacian', number:'', expiry:''},
     flights:[
-      {id:uid('doc'), label:'去程 TPE→SYD', number:'', date:'2026-09-30 23:30'},
-      {id:uid('doc'), label:'回程 BNE→TPE', number:'', date:'2026-10-08 22:50'},
+      {id:uid('doc'), label:'去程 TPE→SYD（CI51）', number:'297 2424980279', date:'2026-09-30 23:30'},
+      {id:uid('doc'), label:'回程 BNE→TPE（CI54）', number:'297 2424980279', date:'2026-10-08 22:50'},
     ],
     hotels:[], insurance:{provider:'', policyNo:''}, visa:{type:'ETA', number:''},
-    bookingNumbers:[], emergencyContacts:[{id:uid('c'), name:'', phone:'', relation:''}], esim:{provider:'', activationCode:''}
+    bookingNumbers:[
+      {id:uid('bk'), label:'華航訂位代號 Booking ref', value:'E99MH9'},
+      {id:uid('bk'), label:'機票號碼 Ticket number', value:'297 2424980279'},
+    ],
+    emergencyContacts:[{id:uid('c'), name:'', phone:'', relation:''}], esim:{provider:'', activationCode:''}
   };
   s.transport[tripId] = [
-    {id:uid('tr'), type:'flight', from:'TPE', to:'SYD', date:'2026-09-30', time:'23:30', bookingRef:'', notes:'華航直飛'},
-    {id:uid('tr'), type:'flight', from:'SYD', to:'BNE', date:'2026-10-05', time:'', bookingRef:'', notes:'國內線，待訂'},
-    {id:uid('tr'), type:'flight', from:'BNE', to:'TPE', date:'2026-10-08', time:'22:50', bookingRef:'', notes:'華航直飛'},
+    {id:uid('tr'), type:'flight', from:'TPE', to:'SYD', date:'2026-09-30', time:'23:30', flightNo:'CI51', bookingRef:'E99MH9', ticketNo:'297 2424980279', terminalFrom:'第二航廈 T2', terminalTo:'第一航廈 T1', fareClass:'N（樂活票價 NL）', baggage:'2件，每件23公斤(50磅)（依樂活經濟艙規則，實際以航空公司系統為準）', checkinInfo:'抵達10:45（隔天）。國際線建議起飛前3小時到機場，經濟艙報到櫃檯通常於起飛前60分鐘截止，實際請以機場公告/航空公司通知為準。', notes:'華航直飛，飛行時間9小時15分'},
+    {id:uid('tr'), type:'flight', from:'SYD', to:'BNE', date:'2026-10-05', time:'', flightNo:'', bookingRef:'', ticketNo:'', terminalFrom:'', terminalTo:'', fareClass:'', baggage:'', checkinInfo:'', notes:'國內線，待訂'},
+    {id:uid('tr'), type:'flight', from:'BNE', to:'TPE', date:'2026-10-08', time:'22:50', flightNo:'CI54', bookingRef:'E99MH9', ticketNo:'297 2424980279', terminalFrom:'第一航廈 T1', terminalTo:'第二航廈 T2', fareClass:'N（樂活票價 NL）', baggage:'2件，每件23公斤(50磅)（依樂活經濟艙規則，實際以航空公司系統為準）', checkinInfo:'抵達05:40（隔天）。國際線建議起飛前3小時到機場，經濟艙報到櫃檯通常於起飛前60分鐘截止，實際請以機場公告/航空公司通知為準。', notes:'華航直飛，飛行時間8小時50分'},
   ];
   s.accommodation[tripId] = [
     {id:uid('ac'), name:'Meriton Suites North Sydney', address:'80 Arthur St, North Sydney', checkin:'2026-10-01', checkout:'2026-10-05', phone:'', bookingRef:''},
@@ -893,7 +976,7 @@ function render(){
     dashboard: renderDashboard, trips: renderTrips, itinerary: renderItinerary, map: renderMapView,
     weather: renderWeather, expenses: renderExpenses, exchange: renderExchange, todo: renderTodo,
     packing: renderPacking, documents: renderDocuments, transport: renderTransport,
-    accommodation: renderAccommodation, notes: renderNotes, data: renderData,
+    accommodation: renderAccommodation, notes: renderNotes, data: renderData, summary: renderSummary,
   };
   const fn = fnMap[view] || renderDashboard;
   root.innerHTML = `<div class="view-inner" id="view-inner"></div>`;
@@ -940,31 +1023,38 @@ function renderDashboard(root){
   const pctClamped = Math.min(100, stats.pct);
   const overBudget = stats.pct>100;
   const ringColor = overBudget ? 'var(--red)' : stats.pct>80 ? 'var(--orange)' : 'var(--blue)';
-  const circumference = 2*Math.PI*46;
+  const circumference = 2*Math.PI*52;
   const ringPct = inProgress? 100 : done ? 100 : Math.max(0, Math.min(100, 100-(daysLeft/60*100)));
+  const msg = countdownMessage(daysLeft, inProgress, done);
+  const urgent = !done && !inProgress && daysLeft<=5;
+  const soon = !done && !inProgress && daysLeft>5 && daysLeft<=10;
 
   root.innerHTML = `
-    <div class="grid" style="grid-template-columns:1.3fr 1fr; gap:18px;">
-      <div class="card" style="background:linear-gradient(135deg, ${colorVar(trip.color)}10, transparent); position:relative; overflow:hidden;">
-        <div class="row-between" style="align-items:flex-start;">
-          <div>
-            <div class="tag tag-${trip.color}" style="margin-bottom:10px;"><i data-lucide="sparkles" class="icon" style="width:11px;height:11px"></i>即將出發</div>
-            <div style="font-family:var(--font-display); font-weight:800; font-size:26px; letter-spacing:-0.02em;">${escapeHtml(trip.city)}</div>
-            <div style="color:var(--text-2); font-size:13px; margin-top:4px;">${escapeHtml(trip.country)} · ${fmtDate(trip.startDate,'short')} – ${fmtDate(trip.endDate,'short')}（共${totalDays}天）</div>
-          </div>
-          <div style="position:relative; width:104px; height:104px; flex-shrink:0;">
-            <svg width="104" height="104" viewBox="0 0 104 104">
-              <circle cx="52" cy="52" r="46" fill="none" stroke="var(--border-soft)" stroke-width="8"/>
-              <circle cx="52" cy="52" r="46" fill="none" stroke="${colorVar(trip.color)}" stroke-width="8" stroke-linecap="round"
-                stroke-dasharray="${circumference}" stroke-dashoffset="${circumference*(1-ringPct/100)}" transform="rotate(-90 52 52)"/>
+    <div class="grid dash-hero-grid">
+      <div class="card hero-card" style="background:linear-gradient(180deg, ${colorVar(trip.color)}0d, transparent 60%);">
+        <div class="tag tag-${trip.color}" style="margin-bottom:10px;"><i data-lucide="sparkles" class="icon" style="width:11px;height:11px"></i>即將出發</div>
+        <div class="hero-title">${escapeHtml(trip.city)}</div>
+        <div class="hero-sub">${escapeHtml(trip.country)} · ${fmtDate(trip.startDate,'short')} – ${fmtDate(trip.endDate,'short')}（共${totalDays}天）</div>
+
+        <div class="hero-ring-zone">
+          <button class="hero-ring-wrap ${urgent?'pulse-urgent':soon?'pulse-soon':''}" id="countdown-ring-btn" aria-label="查看倒數細節">
+            <svg viewBox="0 0 116 116" class="hero-ring-svg">
+              <circle cx="58" cy="58" r="52" fill="none" stroke="var(--border-soft)" stroke-width="9"/>
+              <circle cx="58" cy="58" r="52" fill="none" stroke="${colorVar(trip.color)}" stroke-width="9" stroke-linecap="round"
+                stroke-dasharray="${circumference}" stroke-dashoffset="${circumference*(1-ringPct/100)}" transform="rotate(-90 58 58)" class="hero-ring-arc"/>
             </svg>
-            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
-              <div style="font-family:var(--font-mono); font-size:${done?'13px':'22px'}; font-weight:600;">${done?'已結束':inProgress?'旅程中':daysLeft}</div>
-              ${!done&&!inProgress?'<div style="font-size:10px;color:var(--text-3)">天後出發</div>':''}
+            <div class="hero-ring-center">
+              <div class="hero-ring-num">${done?'':inProgress?'':daysLeft}</div>
+              ${done?'<i data-lucide="flag" class="icon" style="width:22px;height:22px;color:var(--text-3);"></i>':inProgress?'<i data-lucide="sparkles" class="icon" style="width:24px;height:24px;color:var(--green);"></i>':'<div class="hero-ring-label">天後出發</div>'}
             </div>
+          </button>
+          <div class="countdown-badge tag-${msg.tone}">
+            <i data-lucide="${msg.icon}" class="icon" style="width:13px;height:13px;"></i>
+            <span>${msg.text}</span>
           </div>
         </div>
-        <div style="margin-top:16px; font-size:12.5px; color:var(--text-2); line-height:1.6;">${escapeHtml(trip.notes||'')}</div>
+
+        ${trip.notes?`<div class="hero-notes">${escapeHtml(trip.notes)}</div>`:''}
       </div>
 
       <div class="card">
@@ -993,6 +1083,8 @@ function renderDashboard(root){
       </div>
     </div>
 
+    ${renderUpcomingTransportCard(trip)}
+
     <div class="grid grid-3" id="quick-add-row">
       ${quickAddCard('calendar-plus','新增行程','itinerary','blue')}
       ${quickAddCard('receipt','新增花費','expenses','green')}
@@ -1004,11 +1096,57 @@ function renderDashboard(root){
       <div id="recent-activity" style="margin-top:10px;">${renderRecentActivity(trip.id)}</div>
     </div>
   `;
+  root.querySelectorAll('[data-goto-transport]').forEach(el=> el.addEventListener('click', ()=>{ ui.view='transport'; persistUI(); render(); }));
+  document.getElementById('countdown-ring-btn')?.addEventListener('click', ()=>{
+    if(done){ toast(`旅程於 ${fmtDate(trip.endDate)} 結束`,'flag'); return; }
+    if(inProgress){ toast('旅程進行中，祝你玩得開心','sparkles'); return; }
+    if(daysLeft<=1){
+      const hrs = Math.max(0, Math.round((new Date(trip.startDate+'T00:00:00') - new Date())/3600000));
+      toast(daysLeft===0? '今天就出發囉！':`約 ${hrs} 小時後出發`, 'plane-takeoff');
+    } else {
+      toast(`出發日：${fmtDate(trip.startDate)}，還有 ${daysLeft} 天`, 'calendar');
+    }
+  });
   root.querySelectorAll('[data-quickadd]').forEach(el=>{
     el.addEventListener('click', ()=>{ const v=el.dataset.quickadd; ui.view=v; persistUI(); render();
       setTimeout(()=>{ if(v==='itinerary') openItineraryItemModal(); if(v==='expenses') openExpenseModal(); if(v==='todo') openTodoAddModal('自訂'); },30);
     });
   });
+}
+function renderUpcomingTransportCard(trip){
+  const today = todayStr();
+  const list = (state.transport[trip.id]||[]).filter(t=>t.date && t.date>=today).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
+  const next = list[0];
+  if(!next) return '';
+  const meta = TRANSPORT_TYPES.find(x=>x.id===next.type) || TRANSPORT_TYPES[0];
+  const dLeft = daysBetween(today, next.date);
+  return `<div class="card" data-goto-transport="1" style="cursor:pointer; border-left:3px solid var(--blue);">
+    <div class="row-between">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="width:38px;height:38px;border-radius:11px;background:var(--blue-soft);display:flex;align-items:center;justify-content:center;"><i data-lucide="${meta.icon}" class="icon" style="color:var(--blue)"></i></div>
+        <div>
+          <div style="font-weight:700; font-size:13.5px;">下一段交通：${escapeHtml(next.from)} → ${escapeHtml(next.to)}${next.flightNo?' · '+escapeHtml(next.flightNo):''}</div>
+          <div style="font-size:11.5px; color:var(--text-3);">${fmtDate(next.date)} ${next.time||''}${dLeft>0?' · 還有 '+dLeft+' 天':dLeft===0?' · 就是今天':''}</div>
+        </div>
+      </div>
+      <i data-lucide="chevron-right" class="icon" style="color:var(--text-3);"></i>
+    </div>
+    ${(next.baggage||next.checkinInfo)?`<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border-soft); font-size:11.5px; color:var(--text-2); display:flex; flex-direction:column; gap:4px;">
+      ${next.baggage?`<div><i data-lucide="luggage" class="icon" style="width:12px;height:12px;vertical-align:-1px;color:var(--text-3);"></i> 行李額度：${escapeHtml(next.baggage)}</div>`:''}
+      ${next.checkinInfo?`<div><i data-lucide="clock" class="icon" style="width:12px;height:12px;vertical-align:-1px;color:var(--orange);"></i> ${escapeHtml(next.checkinInfo)}</div>`:''}
+    </div>`:''}
+  </div>`;
+}
+function countdownMessage(daysLeft, inProgress, done){
+  if(done) return {icon:'flag', text:'旅程已經結束，好好回味這趟旅行吧', tone:'gray'};
+  if(inProgress) return {icon:'sparkles', text:'旅程進行中，好好享受每一刻', tone:'green'};
+  if(daysLeft<=0) return {icon:'plane-takeoff', text:'今天就出發了，祝旅途愉快', tone:'blue'};
+  if(daysLeft===1) return {icon:'alarm-clock', text:'明天出發！行李都打包好了嗎？', tone:'red'};
+  if(daysLeft<=5) return {icon:'luggage', text:`倒數 ${daysLeft} 天，最後檢查一次待辦清單吧`, tone:'red'};
+  if(daysLeft<=10) return {icon:'zap', text:`只剩 ${daysLeft} 天了，行李開始準備了嗎？`, tone:'orange'};
+  if(daysLeft<=20) return {icon:'list-checks', text:`還有 ${daysLeft} 天，證件跟保險都確認了嗎？`, tone:'orange'};
+  if(daysLeft<=50) return {icon:'calendar-clock', text:`還有 ${daysLeft} 天，行程細節可以慢慢補齊`, tone:'blue'};
+  return {icon:'compass', text:'旅程正在醞釀中，慢慢規劃就好', tone:'gray'};
 }
 function quickAddCard(icon,label,view,color){
   return `<div class="card" data-quickadd="${view}" style="cursor:pointer; display:flex; align-items:center; gap:12px;">
@@ -1196,7 +1334,7 @@ function renderItinDaily(trip, days){
 
 function renderItinItemRow(it, trip){
   const sm = statusMeta(it.status);
-  return `<div class="checklist-row" style="align-items:flex-start;">
+  return `<div class="checklist-row itin-row" style="align-items:flex-start;">
     <div class="num" style="width:44px; flex-shrink:0; font-size:12px; color:var(--text-2); padding-top:2px;">${it.time||'--:--'}</div>
     <div style="flex:1; min-width:0;">
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -1210,7 +1348,7 @@ function renderItinItemRow(it, trip){
       </div>
       ${it.notes?`<div style="font-size:12px; color:var(--text-2); margin-top:4px;">${escapeHtml(it.notes)}</div>`:''}
     </div>
-    <div style="display:flex; gap:3px; flex-shrink:0;">
+    <div class="itin-actions" style="display:flex; gap:3px; flex-shrink:0;">
       ${it.mapLink?`<a href="${it.mapLink}" target="_blank" rel="noopener" class="icon-btn" style="width:28px;height:28px;"><i data-lucide="external-link" class="icon" style="width:13px;height:13px;"></i></a>`:''}
       <button class="icon-btn" style="width:28px;height:28px;" data-add-expense-item="${it.id}" title="新增花費"><i data-lucide="receipt" class="icon" style="width:13px;height:13px;"></i></button>
       <button class="icon-btn" style="width:28px;height:28px;" data-edit-item="${it.id}"><i data-lucide="pencil" class="icon" style="width:13px;height:13px;"></i></button>
@@ -1480,12 +1618,19 @@ function renderMapView(root){
             <div class="checklist-row">
               <i data-lucide="map-pin" class="icon" style="color:var(--text-3);"></i>
               <div class="cl-text">${escapeHtml(it.name)}<div style="font-size:11px;color:var(--text-3)">${escapeHtml(it.location)}</div></div>
+              <button class="icon-btn" style="width:28px;height:28px;" data-map-edit="${it.id}" title="編輯這個地點/連結"><i data-lucide="pencil" class="icon" style="width:13px;height:13px"></i></button>
               ${it.mapLink?`<a href="${it.mapLink}" target="_blank" rel="noopener" class="icon-btn" style="width:28px;height:28px;"><i data-lucide="external-link" class="icon" style="width:13px;height:13px"></i></a>`:''}
             </div>`).join('')}</div>
         </div>`;
       }).join('') || `<div class="card" style="grid-column:1/-1"><div class="empty-state"><i data-lucide="map-pin-off" class="icon"></i><div class="es-sub">還沒有任何標記地點的行程</div></div></div>`}
     </div>
   `;
+  root.querySelectorAll('[data-map-edit]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const {item} = findItinItem(trip.id, el.dataset.mapEdit);
+      if(item) openItineraryItemModal(item);
+    });
+  });
 }
 
 /* ============================================================
@@ -1592,6 +1737,10 @@ function renderExpenses(root){
     ${overBudget?`<div class="card" style="background:var(--red-soft); border-color:var(--red-line); display:flex; align-items:center; gap:10px;">
       <i data-lucide="alert-triangle" class="icon" style="color:var(--red);"></i>
       <div style="font-size:12.5px; color:var(--red); font-weight:600;">已超出預算 ${fmtMoney(Math.abs(stats.remaining))}，記得留意後續花費</div>
+    </div>`:''}
+    ${stats.unconverted>0?`<div class="card" style="background:var(--orange-soft); border-color:var(--orange-line); display:flex; align-items:center; gap:10px;">
+      <i data-lucide="info" class="icon" style="color:var(--orange);"></i>
+      <div style="font-size:12.5px; color:var(--text);">有 ${stats.unconverted} 筆花費是不同幣別、目前尚未取得即時匯率，暫以原始數字直接加總（可能不準確），稍後匯率載入完成會自動換算更新。</div>
     </div>`:''}
     <div class="grid grid-2">
       <div class="card">
@@ -1935,10 +2084,10 @@ function renderDocuments(root){
       <div class="card">
         <div class="row-between"><div class="card-title">緊急聯絡人</div><button class="btn btn-ghost btn-sm" id="add-contact-btn"><i data-lucide="plus" class="icon"></i></button></div>
         <div id="contacts-list" style="margin-top:8px;">${doc.emergencyContacts.map(c=>`
-          <div class="checklist-row">
-            <input placeholder="姓名" data-cfield="name|${c.id}" value="${escapeHtml(c.name)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:80px;">
-            <input placeholder="電話" data-cfield="phone|${c.id}" value="${escapeHtml(c.phone)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:100px;">
-            <input placeholder="關係" data-cfield="relation|${c.id}" value="${escapeHtml(c.relation)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:70px;">
+          <div class="checklist-row contact-row" style="flex-wrap:wrap;">
+            <input placeholder="姓名" class="contact-field" data-cfield="name|${c.id}" value="${escapeHtml(c.name)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:80px;">
+            <input placeholder="電話" class="contact-field" data-cfield="phone|${c.id}" value="${escapeHtml(c.phone)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:100px;">
+            <input placeholder="關係" class="contact-field" data-cfield="relation|${c.id}" value="${escapeHtml(c.relation)}" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; width:70px;">
             <button class="icon-btn" style="width:26px;height:26px;" data-del-contact="${c.id}"><i data-lucide="x" class="icon" style="width:12px;height:12px"></i></button>
           </div>`).join('') || `<div class="es-sub">尚未新增聯絡人</div>`}
         </div>
@@ -1999,15 +2148,22 @@ function renderTransport(root){
               <div style="width:36px;height:36px;border-radius:10px;background:var(--blue-soft);display:flex;align-items:center;justify-content:center;">
                 <i data-lucide="${meta.icon}" class="icon" style="color:var(--blue)"></i>
               </div>
-              <div><div style="font-weight:700; font-size:14px;">${escapeHtml(t.from)} → ${escapeHtml(t.to)}</div><div style="font-size:11.5px; color:var(--text-3);">${meta.label} · ${fmtDate(t.date,'short')} ${t.time||''}</div></div>
+              <div><div style="font-weight:700; font-size:14px;">${escapeHtml(t.from)} → ${escapeHtml(t.to)}</div><div style="font-size:11.5px; color:var(--text-3);">${meta.label}${t.flightNo?' · '+escapeHtml(t.flightNo):''} · ${fmtDate(t.date,'short')} ${t.time||''}</div></div>
             </div>
             <div style="display:flex; gap:4px;">
               <button class="icon-btn" style="width:28px;height:28px;" data-edit-transport="${t.id}"><i data-lucide="pencil" class="icon" style="width:13px;height:13px"></i></button>
               <button class="icon-btn" style="width:28px;height:28px;" data-del-transport="${t.id}"><i data-lucide="trash-2" class="icon" style="width:13px;height:13px;color:var(--red)"></i></button>
             </div>
           </div>
-          ${t.bookingRef?`<div style="font-size:11.5px; margin-top:10px; color:var(--text-2);">訂位編號：<span class="num">${escapeHtml(t.bookingRef)}</span></div>`:''}
-          ${t.notes?`<div style="font-size:12px; margin-top:4px; color:var(--text-2);">${escapeHtml(t.notes)}</div>`:''}
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;">
+            ${t.bookingRef?`<span class="tag tag-blue">訂位 ${escapeHtml(t.bookingRef)}</span>`:''}
+            ${t.ticketNo?`<span class="tag tag-gray">票號 ${escapeHtml(t.ticketNo)}</span>`:''}
+            ${t.fareClass?`<span class="tag tag-gray">${escapeHtml(t.fareClass)}</span>`:''}
+            ${t.baggage?`<span class="tag tag-green">行李 ${escapeHtml(t.baggage)}</span>`:''}
+          </div>
+          ${(t.terminalFrom||t.terminalTo)?`<div style="font-size:11.5px; margin-top:8px; color:var(--text-2);">航廈：${escapeHtml(t.terminalFrom||'—')} → ${escapeHtml(t.terminalTo||'—')}</div>`:''}
+          ${t.checkinInfo?`<div style="font-size:11.5px; margin-top:4px; color:var(--orange); display:flex; gap:5px; align-items:flex-start;"><i data-lucide="clock" class="icon" style="width:12px;height:12px;margin-top:2px;flex-shrink:0;"></i><span>${escapeHtml(t.checkinInfo)}</span></div>`:''}
+          ${t.notes?`<div style="font-size:12px; margin-top:6px; color:var(--text-2);">${escapeHtml(t.notes)}</div>`:''}
         </div>`;
       }).join('') || `<div class="card" style="grid-column:1/-1"><div class="empty-state"><i data-lucide="plane" class="icon"></i><div class="es-sub">還沒有交通紀錄</div></div></div>`}
     </div>
@@ -2028,13 +2184,28 @@ function openTransportModal(t){
       <div class="field"><label>目的地</label><input id="tr-to" value="${escapeHtml(t?.to||'')}"></div>
       <div class="field"><label>日期</label><input type="date" id="tr-date" value="${t?.date||''}"></div>
       <div class="field"><label>時間</label><input type="time" id="tr-time" value="${t?.time||''}"></div>
+      <div class="field"><label>航班/車次編號</label><input id="tr-flightno" value="${escapeHtml(t?.flightNo||'')}" placeholder="例如：CI51"></div>
+      <div class="field"><label>訂位代號</label><input id="tr-ref" value="${escapeHtml(t?.bookingRef||'')}"></div>
+      <div class="field"><label>機票/票號</label><input id="tr-ticketno" value="${escapeHtml(t?.ticketNo||'')}"></div>
+      <div class="field"><label>艙等/票價代碼</label><input id="tr-class" value="${escapeHtml(t?.fareClass||'')}" placeholder="例如：經濟艙 N"></div>
+      <div class="field"><label>出發航廈</label><input id="tr-termfrom" value="${escapeHtml(t?.terminalFrom||'')}"></div>
+      <div class="field"><label>抵達航廈</label><input id="tr-termto" value="${escapeHtml(t?.terminalTo||'')}"></div>
+      <div class="field" style="grid-column:1/-1;"><label>免費行李額度</label><input id="tr-baggage" value="${escapeHtml(t?.baggage||'')}" placeholder="例如：2件，每件23公斤"></div>
+      <div class="field" style="grid-column:1/-1;"><label>報到/登機提醒</label><input id="tr-checkin" value="${escapeHtml(t?.checkinInfo||'')}" placeholder="例如：建議提前2-3小時報到、起飛前48小時可線上報到"></div>
     </div>
-    <div class="field"><label>訂位編號</label><input id="tr-ref" value="${escapeHtml(t?.bookingRef||'')}"></div>
     <div class="field"><label>備註</label><textarea id="tr-notes">${escapeHtml(t?.notes||'')}</textarea></div>
   `;
-  openModal({title:isEdit?'編輯交通':'新增交通', body, foot:`<button class="btn btn-outline" data-close>取消</button><button class="btn btn-filled" id="save-tr-btn">${isEdit?'儲存':'新增'}</button>`});
+  openModal({title:isEdit?'編輯交通':'新增交通', wide:true, body, foot:`<button class="btn btn-outline" data-close>取消</button><button class="btn btn-filled" id="save-tr-btn">${isEdit?'儲存':'新增'}</button>`});
   document.getElementById('save-tr-btn').addEventListener('click', ()=>{
-    const data = {type:document.getElementById('tr-type').value, from:document.getElementById('tr-from').value, to:document.getElementById('tr-to').value, date:document.getElementById('tr-date').value, time:document.getElementById('tr-time').value, bookingRef:document.getElementById('tr-ref').value, notes:document.getElementById('tr-notes').value};
+    const data = {
+      type:document.getElementById('tr-type').value, from:document.getElementById('tr-from').value, to:document.getElementById('tr-to').value,
+      date:document.getElementById('tr-date').value, time:document.getElementById('tr-time').value,
+      flightNo:document.getElementById('tr-flightno').value, bookingRef:document.getElementById('tr-ref').value,
+      ticketNo:document.getElementById('tr-ticketno').value, fareClass:document.getElementById('tr-class').value,
+      terminalFrom:document.getElementById('tr-termfrom').value, terminalTo:document.getElementById('tr-termto').value,
+      baggage:document.getElementById('tr-baggage').value, checkinInfo:document.getElementById('tr-checkin').value,
+      notes:document.getElementById('tr-notes').value
+    };
     if(isEdit) Object.assign(t,data); else state.transport[trip.id].push({id:uid('tr'), ...data});
     persist(true); closeModal(); ui.view='transport'; persistUI(); render(); toast('已儲存','check');
   });
@@ -2066,7 +2237,7 @@ function renderAccommodation(root){
           <div class="row-between" style="margin-top:10px;">
             <div><div style="font-size:10px;color:var(--text-3);">Check-in</div><div class="num" style="font-size:12.5px;">${fmtDate(a.checkin,'short')}</div></div>
             <div><div style="font-size:10px;color:var(--text-3);">Check-out</div><div class="num" style="font-size:12.5px;">${fmtDate(a.checkout,'short')}</div></div>
-            <a href="https://maps.google.com/?q=${encodeURIComponent(a.address||a.name)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i data-lucide="navigation" class="icon"></i>導航</a>
+            <a href="${a.mapLink || ('https://maps.google.com/?q='+encodeURIComponent(a.address||a.name))}" target="_blank" rel="noopener" class="btn btn-outline btn-sm"><i data-lucide="navigation" class="icon"></i>導航</a>
           </div>
         </div>`).join('') || `<div class="card" style="grid-column:1/-1"><div class="empty-state"><i data-lucide="building-2" class="icon"></i><div class="es-sub">還沒有住宿紀錄</div></div></div>`}
     </div>
@@ -2083,6 +2254,7 @@ function openAccModal(a){
   const body = `
     <div class="field"><label>名稱</label><input id="ac-name" value="${escapeHtml(a?.name||'')}"></div>
     <div class="field"><label>地址</label><input id="ac-addr" value="${escapeHtml(a?.address||'')}"></div>
+    <div class="field"><label>Google Maps 連結（留空則自動用地址搜尋，可自行貼上正確連結覆蓋）</label><input id="ac-maplink" value="${escapeHtml(a?.mapLink||'')}" placeholder="https://maps.google.com/..."></div>
     <div class="grid grid-2">
       <div class="field"><label>Check-in</label><input type="date" id="ac-in" value="${a?.checkin||''}"></div>
       <div class="field"><label>Check-out</label><input type="date" id="ac-out" value="${a?.checkout||''}"></div>
@@ -2092,7 +2264,7 @@ function openAccModal(a){
   `;
   openModal({title:isEdit?'編輯住宿':'新增住宿', body, foot:`<button class="btn btn-outline" data-close>取消</button><button class="btn btn-filled" id="save-ac-btn">${isEdit?'儲存':'新增'}</button>`});
   document.getElementById('save-ac-btn').addEventListener('click', ()=>{
-    const data = {name:document.getElementById('ac-name').value, address:document.getElementById('ac-addr').value, checkin:document.getElementById('ac-in').value, checkout:document.getElementById('ac-out').value, phone:document.getElementById('ac-phone').value, bookingRef:document.getElementById('ac-ref').value};
+    const data = {name:document.getElementById('ac-name').value, address:document.getElementById('ac-addr').value, mapLink:document.getElementById('ac-maplink').value, checkin:document.getElementById('ac-in').value, checkout:document.getElementById('ac-out').value, phone:document.getElementById('ac-phone').value, bookingRef:document.getElementById('ac-ref').value};
     if(!data.name){ toast('請輸入名稱','alert-triangle'); return; }
     if(isEdit) Object.assign(a,data); else state.accommodation[trip.id].push({id:uid('ac'), ...data});
     persist(true); closeModal(); ui.view='accommodation'; persistUI(); render(); toast('已儲存','check');
@@ -2215,8 +2387,81 @@ function renderData(root){
 }
 
 /* ============================================================
-   FAB 快速新增
+   旅程摘要匯出（PRD 十九：旅行結束匯出）
    ============================================================ */
+function renderSummary(root){
+  if(needsTripGuard(root,'旅程摘要匯出')) return;
+  const trip = activeTrip();
+  const days = tripDayList(trip);
+  const stats = tripBudgetStats(trip.id);
+  const exp = (state.expenses[trip.id]||[]).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const byCat = {};
+  exp.forEach(e=>{ byCat[e.category] = (byCat[e.category]||0) + Number(e.amount||0); });
+  const notes = state.notes[trip.id]||[];
+  const spots = [];
+  days.forEach(d=> dayItems(trip.id,d.date).forEach(it=>{ if(it.location) spots.push({...it, dayNum:d.dayNum}); }));
+
+  root.innerHTML = `
+    <div class="card no-print" style="background:var(--blue-soft); border-color:var(--blue-line); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div style="font-size:12.5px; color:var(--text);">這是給整趟旅程做總結的匯出頁，設計成適合列印/存成PDF的排版。按右邊按鈕開啟瀏覽器列印，選「另存為PDF」即可。</div>
+      <button class="btn btn-filled btn-sm" id="do-print-btn" style="flex-shrink:0;"><i data-lucide="printer" class="icon"></i>列印 / 存成PDF</button>
+    </div>
+
+    <div class="card" style="text-align:center; padding:32px 20px;">
+      <div style="font-family:var(--font-display); font-weight:800; font-size:24px;">${escapeHtml(trip.country)} · ${escapeHtml(trip.city)}</div>
+      <div style="color:var(--text-2); font-size:13px; margin-top:6px;">${fmtDate(trip.startDate,'short')} – ${fmtDate(trip.endDate,'short')} · 共${days.length}天</div>
+    </div>
+
+    <div class="grid grid-3">
+      ${statTile('總花費', fmtMoney(stats.spent, trip.currency), 'wallet', 'blue')}
+      ${statTile('景點數', spots.length+'', 'map-pin', 'green')}
+      ${statTile('筆記數', notes.length+'', 'notebook-pen', 'orange')}
+    </div>
+
+    <div class="card">
+      <div class="card-title">每日行程回顧</div>
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:16px;">
+        ${days.map(d=>{
+          const items = dayItems(trip.id,d.date).slice().sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+          if(!items.length) return '';
+          return `<div style="page-break-inside:avoid;">
+            <div style="font-weight:700; font-size:13px; color:${colorVar(trip.color)}; margin-bottom:6px;">D${d.dayNum} · ${fmtDate(d.date)}</div>
+            ${items.map(it=>`<div style="font-size:12.5px; padding:4px 0; display:flex; gap:8px; color:var(--text-2);">
+              <span class="num" style="width:42px; flex-shrink:0;">${it.time||''}</span>
+              <span style="flex:1;">${escapeHtml(it.name)}${it.location?' · '+escapeHtml(it.location):''}</span>
+              ${it.cost?`<span class="num">${fmtMoney(it.cost)}</span>`:''}
+            </div>`).join('')}
+          </div>`;
+        }).join('') || `<div class="es-sub">還沒有行程紀錄</div>`}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">花費分析</div>
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+        ${Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+          <div class="row-between" style="font-size:12.5px;"><span>${cat}</span><span class="num" style="font-weight:600;">${fmtMoney(amt)}</span></div>
+        `).join('') || `<div class="es-sub">還沒有花費紀錄</div>`}
+        <div class="row-between" style="font-size:13px; font-weight:700; border-top:1px solid var(--border); padding-top:8px; margin-top:4px;"><span>總計</span><span class="num">${fmtMoney(stats.spent, trip.currency)}</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">景點清單</div>
+      <div style="margin-top:10px; columns:2; column-gap:20px;">
+        ${spots.map(s=>`<div style="font-size:12px; padding:3px 0; break-inside:avoid;">D${s.dayNum} · ${escapeHtml(s.name)}</div>`).join('') || `<div class="es-sub">還沒有標記地點</div>`}
+      </div>
+    </div>
+
+    ${notes.length?`<div class="card">
+      <div class="card-title">旅行筆記 / 心得</div>
+      <div style="margin-top:10px; display:flex; flex-direction:column; gap:12px;">
+        ${notes.map(n=>`<div style="page-break-inside:avoid;"><div style="font-weight:700; font-size:12.5px;">${escapeHtml(n.title||'（無標題）')}</div><div style="font-size:12px; color:var(--text-2); margin-top:4px;">${simpleMarkdown(n.markdown)}</div></div>`).join('')}
+      </div>
+    </div>`:''}
+  `;
+  root.querySelector('#do-print-btn').addEventListener('click', ()=> window.print());
+}
 function setupFab(){
   document.getElementById('fab').addEventListener('click', ()=>{
     const body = `<div style="display:flex; flex-direction:column; gap:8px;">
@@ -2249,6 +2494,7 @@ async function init(){
   await loadState();
   render();
   setupFab();
+  ensureGlobalRates();
 }
 init();
 
