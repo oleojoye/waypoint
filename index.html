@@ -56,6 +56,8 @@ html,body{height:100%;}
 body{
   font-family:var(--font-body);
   background:var(--bg);
+  background-image:radial-gradient(circle at 10% 0%, var(--blue-soft) 0%, transparent 42%), radial-gradient(circle at 90% 8%, var(--green-soft) 0%, transparent 38%);
+  background-attachment:fixed;
   color:var(--text);
   -webkit-font-smoothing:antialiased;
   overflow:hidden;
@@ -314,7 +316,21 @@ a{color:inherit;}
 }
 @keyframes sheetUp{ from{transform:translateY(24px); opacity:.6;} to{transform:translateY(0); opacity:1;} }
 
-/* ============ Dashboard hero / countdown ============ */
+/* ============ Card-list components (avatar / mini progress / chips) ============ */
+.avatar-badge{width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 3px 8px -2px rgba(0,0,0,0.18);}
+.avatar-badge .icon{width:21px; height:21px; color:#fff; stroke-width:2.3px;}
+.mini-progress{height:6px; border-radius:20px; background:var(--surface-2); overflow:hidden; margin-top:12px;}
+.mini-progress-fill{height:100%; border-radius:20px; transition:width .3s ease;}
+.count-chip{font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; white-space:nowrap;}
+.folder-card{cursor:pointer; -webkit-tap-highlight-color:transparent; transition:box-shadow .15s ease;}
+.folder-card:active{box-shadow:var(--shadow-sm);}
+.folder-header{display:flex; align-items:center; gap:14px;}
+.folder-body-title{font-weight:800; font-size:15.5px; font-family:var(--font-display);}
+.folder-body-sub{font-size:11.5px; color:var(--text-3); margin-top:2px;}
+.folder-expand{margin-top:16px; padding-top:16px; border-top:1px solid var(--border-soft); display:flex; flex-direction:column; gap:12px;}
+.pill-tabs{display:inline-flex; gap:4px; background:var(--surface-2); padding:4px; border-radius:12px; border:1px solid var(--border-soft);}
+.pill-tab{padding:7px 16px; border-radius:9px; font-size:12.5px; font-weight:700; color:var(--text-2); cursor:pointer;}
+.pill-tab.active{background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm);}
 .dash-hero-grid{grid-template-columns:1.3fr 1fr; gap:18px;}
 .hero-card{display:flex; flex-direction:column;}
 .hero-title{font-family:var(--font-display); font-weight:800; font-size:26px; letter-spacing:-0.02em; line-height:1.15;}
@@ -361,6 +377,50 @@ a{color:inherit;}
 @media (max-width:860px){
   .field input,.field select,.field textarea,.contact-field,#global-search,#mobile-global-search{font-size:16px !important;}
 }
+
+/* ============ Home: colorful trip modules (subscription-app inspired) ============ */
+.home-hero{
+  text-align:center; padding:26px 20px 22px; border-radius:24px; position:relative; overflow:hidden;
+  background:linear-gradient(160deg, var(--hero-tint,var(--blue-soft)) 0%, var(--surface) 65%);
+  border:1px solid var(--border);
+}
+.home-hero-label{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:var(--text-2); letter-spacing:.02em;}
+.home-hero-num{font-family:var(--font-display); font-weight:800; font-size:52px; letter-spacing:-0.02em; line-height:1.05; margin:6px 0 2px; color:var(--hero-color,var(--blue));}
+.home-hero-sub{font-size:12.5px; color:var(--text-2); font-weight:600;}
+@media (max-width:520px){ .home-hero-num{font-size:40px;} .home-hero{padding:22px 16px 18px; border-radius:20px;} }
+
+.filter-chip-row{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px;}
+.filter-chip{
+  flex-shrink:0; padding:7px 14px; border-radius:20px; font-size:12px; font-weight:700; border:1px solid var(--border);
+  background:var(--surface); color:var(--text-2); cursor:pointer; white-space:nowrap; transition:all .12s ease;
+}
+.filter-chip.active{background:var(--text); color:var(--surface); border-color:var(--text);}
+[data-theme="dark"] .filter-chip.active{background:var(--blue); border-color:var(--blue);}
+
+.trip-module{border-radius:22px; overflow:hidden; background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-sm);}
+.trip-module-head{display:flex; align-items:center; gap:12px; padding:16px 18px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+.trip-icon-badge{
+  width:46px; height:46px; border-radius:14px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  background:var(--badge-color,var(--blue)); box-shadow:0 4px 10px -2px var(--badge-color,var(--blue));
+}
+.trip-icon-badge .icon{color:#fff; width:22px; height:22px; stroke-width:2.2px;}
+.trip-module-mid{flex:1; min-width:0;}
+.trip-module-name{font-family:var(--font-display); font-weight:800; font-size:15.5px; letter-spacing:-0.01em; display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
+.trip-module-cat{display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--text-3); font-weight:600; margin-top:2px;}
+.trip-module-right{text-align:right; flex-shrink:0;}
+.trip-module-days{font-family:var(--font-mono); font-weight:700; font-size:13.5px; color:var(--right-color,var(--blue));}
+.trip-module-daylabel{font-size:10px; color:var(--text-3); font-weight:600;}
+.trip-module-chevron{color:var(--text-3); transition:transform .2s ease; flex-shrink:0;}
+.trip-module.expanded .trip-module-chevron{transform:rotate(180deg);}
+.trip-module-progress-track{height:5px; background:var(--border-soft); width:100%;}
+.trip-module-progress-fill{height:100%; background:var(--bar-color,var(--blue)); transition:width .4s ease;}
+.trip-module-body{padding:4px 18px 18px; border-top:1px solid var(--border-soft); margin-top:2px; animation:moduleOpen .18s ease;}
+@keyframes moduleOpen{ from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);} }
+.tm-stat-row{display:flex; gap:10px; margin:14px 0;}
+.tm-stat{flex:1; background:var(--surface-2); border-radius:14px; padding:12px; border:1px solid var(--border-soft);}
+.tm-stat-label{font-size:10px; color:var(--text-3); font-weight:700;}
+.tm-stat-val{font-family:var(--font-mono); font-weight:700; font-size:14.5px; margin-top:3px;}
+.tm-actions{display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;}
 
 @media print{
   #sidebar,#topbar,#fab,.no-print{display:none !important;}
@@ -1177,42 +1237,89 @@ function renderRecentActivity(tripId){
 /* ============================================================
    TRIPS
    ============================================================ */
+let tripsCollapsedInit = false;
+let tripsCollapsed = {};
 function renderTrips(root){
+  if(!tripsCollapsedInit){
+    state.trips.forEach(t=>{ tripsCollapsed[t.id] = t.id!==ui.activeTripId; });
+    tripsCollapsedInit = true;
+  }
+  const today = todayStr();
+  const upcoming = state.trips.filter(t=>t.startDate>=today).sort((a,b)=>a.startDate.localeCompare(b.startDate))[0];
+  const current = state.trips.find(t=> today>=t.startDate && today<=t.endDate);
+  const heroTrip = current || upcoming;
+  const heroDays = heroTrip ? daysBetween(today, heroTrip.startDate) : null;
+
   root.innerHTML = `
+    ${heroTrip?`<div class="card" style="text-align:center; padding:26px 20px;">
+      <div class="folder-body-sub" style="font-size:12px;">${current? '旅程進行中':'距離下一趟旅程'}</div>
+      <div class="num" style="font-size:44px; font-weight:700; color:${colorVar(heroTrip.color)}; line-height:1.15; margin-top:2px;">${current? escapeHtml(heroTrip.city) : heroDays}</div>
+      <div style="font-size:12.5px; color:var(--text-2); margin-top:4px;">${current? '祝旅途愉快' : (heroDays===0?'就是今天！':'天後出發 · '+escapeHtml(heroTrip.city))}</div>
+    </div>`:''}
+
     <div class="row-between">
       <div class="card-sub" style="font-size:13px;">共 ${state.trips.length} 個旅程</div>
       <button class="btn btn-filled btn-sm" id="add-trip-btn"><i data-lucide="plus" class="icon"></i>新增旅程</button>
     </div>
-    <div class="grid grid-2" id="trips-grid"></div>
+    <div style="display:flex; flex-direction:column; gap:12px;" id="trips-list"></div>
   `;
-  const grid = root.querySelector('#trips-grid');
+  const list = root.querySelector('#trips-list');
   if(!state.trips.length){
-    grid.innerHTML = `<div class="card" style="grid-column:1/-1;"><div class="empty-state"><i data-lucide="briefcase" class="icon"></i><div class="es-title">還沒有旅程</div><div class="es-sub">點右上角「新增旅程」建立第一個吧</div></div></div>`;
+    list.innerHTML = `<div class="card"><div class="empty-state"><i data-lucide="briefcase" class="icon"></i><div class="es-title">還沒有旅程</div><div class="es-sub">點右上角「新增旅程」建立第一個吧，之後每個旅程都可以像資料夾一樣收合起來</div></div></div>`;
   } else {
-    grid.innerHTML = state.trips.map(t=>{
+    list.innerHTML = state.trips.map(t=>{
       const stats = tripBudgetStats(t.id);
-      const days = tripDayList(t).length;
-      return `<div class="card" style="cursor:pointer;" data-open-trip="${t.id}">
-        <div class="row-between">
-          <div class="tag tag-${t.color}">${escapeHtml(t.country)}</div>
-          <div style="display:flex; gap:4px;">
-            <button class="icon-btn btn-sm" style="width:28px;height:28px;" data-edit-trip="${t.id}"><i data-lucide="pencil" class="icon" style="width:13px;height:13px"></i></button>
-            <button class="icon-btn btn-sm" style="width:28px;height:28px;" data-del-trip="${t.id}"><i data-lucide="trash-2" class="icon" style="width:13px;height:13px;color:var(--red)"></i></button>
+      const dayCount = tripDayList(t).length;
+      const collapsed = tripsCollapsed[t.id];
+      const dLeft = daysBetween(today, t.startDate);
+      const isCurrent = today>=t.startDate && today<=t.endDate;
+      const isDone = today>t.endDate;
+      const chipLabel = isDone? '已結束' : isCurrent? '進行中' : dLeft===0? '今天出發' : dLeft>0? dLeft+' 天後':'';
+      const chipTone = isDone?'gray':isCurrent?'green':dLeft<=5?'red':dLeft<=15?'orange':'blue';
+      return `<div class="card folder-card" data-trip-toggle="${t.id}">
+        <div class="folder-header">
+          <div class="avatar-badge" style="background:${colorVar(t.color)};"><i data-lucide="compass" class="icon"></i></div>
+          <div style="flex:1; min-width:0;">
+            <div class="folder-body-title">${escapeHtml(t.city)}${t.id===ui.activeTripId?' <span class="tag tag-blue" style="vertical-align:2px;">目前使用中</span>':''}</div>
+            <div class="folder-body-sub">${escapeHtml(t.country)} · ${fmtDate(t.startDate,'short')} – ${fmtDate(t.endDate,'short')} · ${dayCount}天</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0;">
+            <span class="count-chip tag-${chipTone}">${chipLabel}</span>
+            <i data-lucide="${collapsed?'chevron-down':'chevron-up'}" class="icon" style="color:var(--text-3);"></i>
           </div>
         </div>
-        <div style="font-family:var(--font-display); font-weight:800; font-size:18px; margin-top:10px;">${escapeHtml(t.city)}</div>
-        <div style="font-size:12px; color:var(--text-3); margin-top:2px;">${fmtDate(t.startDate,'short')} – ${fmtDate(t.endDate,'short')} · ${days}天</div>
-        <div class="progress-track" style="margin-top:14px;"><div class="progress-fill" style="width:${Math.min(100,stats.pct)}%; background:${colorVar(t.color)}"></div></div>
+        <div class="mini-progress"><div class="mini-progress-fill" style="width:${Math.min(100,stats.pct)}%; background:${stats.pct>100?'var(--red)':colorVar(t.color)};"></div></div>
         <div class="row-between" style="margin-top:6px;">
-          <span style="font-size:11px; color:var(--text-3);">${fmtMoney(stats.spent)} / ${fmtMoney(stats.budget,t.currency)}</span>
+          <span style="font-size:11px; color:var(--text-3);" class="num">${fmtMoney(stats.spent)} / ${fmtMoney(stats.budget,t.currency)}</span>
           <span style="font-size:11px; color:var(--text-3);">${stats.pct}%</span>
         </div>
+        ${collapsed?'':`<div class="folder-expand no-print-anim">
+          ${t.notes?`<div style="font-size:12.5px; color:var(--text-2); line-height:1.6;">${escapeHtml(t.notes)}</div>`:''}
+          <div class="grid grid-3">
+            <div><div style="font-size:10px;color:var(--text-3);">已花費</div><div class="num" style="font-size:13px;font-weight:600;">${fmtMoney(stats.spent)}</div></div>
+            <div><div style="font-size:10px;color:var(--text-3);">剩餘預算</div><div class="num" style="font-size:13px;font-weight:600; color:${stats.remaining<0?'var(--red)':'var(--text)'}">${fmtMoney(stats.remaining)}</div></div>
+            <div><div style="font-size:10px;color:var(--text-3);">花費筆數</div><div class="num" style="font-size:13px;font-weight:600;">${stats.count}</div></div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-filled btn-sm" data-open-trip="${t.id}" style="flex:1;"><i data-lucide="arrow-right-circle" class="icon"></i>進入此旅程</button>
+            <button class="btn btn-outline btn-sm" data-edit-trip="${t.id}"><i data-lucide="pencil" class="icon"></i>編輯</button>
+            <button class="btn btn-danger btn-sm" data-del-trip="${t.id}"><i data-lucide="trash-2" class="icon"></i>刪除</button>
+          </div>
+        </div>`}
       </div>`;
     }).join('');
   }
   root.querySelector('#add-trip-btn').addEventListener('click', ()=>openTripModal());
+  root.querySelectorAll('[data-trip-toggle]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      if(e.target.closest('button')) return;
+      const id = el.dataset.tripToggle;
+      tripsCollapsed[id] = !tripsCollapsed[id];
+      renderTrips(root);
+    });
+  });
   root.querySelectorAll('[data-open-trip]').forEach(el=>{
-    el.addEventListener('click', (e)=>{ if(e.target.closest('button')) return; ui.activeTripId=el.dataset.openTrip; ui.view='itinerary'; persistUI(); render(); });
+    el.addEventListener('click', (e)=>{ e.stopPropagation(); ui.activeTripId=el.dataset.openTrip; ui.view='dashboard'; persistUI(); render(); });
   });
   root.querySelectorAll('[data-edit-trip]').forEach(el=> el.addEventListener('click',(e)=>{e.stopPropagation(); openTripModal(state.trips.find(t=>t.id===el.dataset.editTrip));}));
   root.querySelectorAll('[data-del-trip]').forEach(el=> el.addEventListener('click',(e)=>{
@@ -1221,10 +1328,12 @@ function renderTrips(root){
       const id = el.dataset.delTrip;
       state.trips = state.trips.filter(t=>t.id!==id);
       [state.itinerary,state.expenses,state.todos,state.packing,state.documents,state.transport,state.accommodation,state.notes].forEach(bucket=> delete bucket[id]);
+      delete tripsCollapsed[id];
       if(ui.activeTripId===id) ui.activeTripId = state.trips[0]? state.trips[0].id : null;
       persist(true); persistUI(); render(); toast('已刪除旅程','trash-2');
     }
   }));
+  lucide.createIcons();
 }
 
 function openTripModal(trip){
@@ -1311,18 +1420,21 @@ function renderItinDaily(trip, days){
     const items = dayItems(trip.id, d.date).slice().sort((a,b)=> (a.time||'').localeCompare(b.time||''));
     const collapsed = itinCollapsed[d.date];
     const dayCost = items.reduce((s,i)=>s+Number(i.cost||0),0);
-    return `<div class="card" style="padding:0; overflow:hidden;">
+    const doneCount = items.filter(i=>i.status==='完成').length;
+    const dayPct = items.length? Math.round(doneCount/items.length*100):0;
+    return `<div class="card" style="padding:0; overflow:hidden; border-left:3px solid ${colorVar(trip.color)};">
       <div class="row-between" data-toggle-day="${d.date}" style="cursor:pointer; padding:16px 20px;">
-        <div style="display:flex; align-items:center; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; flex:1; min-width:0;">
           <div style="width:38px;height:38px;border-radius:10px;background:${colorVar(trip.color)}12;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
             <span class="num" style="font-weight:700; font-size:13px; color:${colorVar(trip.color)}">D${d.dayNum}</span>
           </div>
-          <div>
+          <div style="flex:1; min-width:0;">
             <div style="font-weight:700; font-size:14px;">${fmtDate(d.date)}</div>
             <div style="font-size:11.5px; color:var(--text-3);">${items.length} 個行程${dayCost?' · '+fmtMoney(dayCost)+' '+trip.currency:''}</div>
+            ${items.length?`<div class="mini-progress" style="margin-top:7px; max-width:180px;"><div class="mini-progress-fill" style="width:${dayPct}%; background:${colorVar(trip.color)};"></div></div>`:''}
           </div>
         </div>
-        <i data-lucide="${collapsed?'chevron-down':'chevron-up'}" class="icon" style="color:var(--text-3);"></i>
+        <i data-lucide="${collapsed?'chevron-down':'chevron-up'}" class="icon" style="color:var(--text-3); flex-shrink:0;"></i>
       </div>
       ${collapsed?'':`<div style="padding:0 20px 18px;">
         ${items.length? items.map(it=>renderItinItemRow(it,trip)).join('') : `<div style="padding:16px 0; color:var(--text-3); font-size:12.5px;">這天還沒有安排行程</div>`}
@@ -1941,14 +2053,17 @@ function renderTodo(root){
       <div class="progress-track" style="margin-top:10px;"><div class="progress-fill" style="width:${pct}%; background:var(--green);"></div></div>
     </div>
     <div class="grid grid-2">
-      ${groups.map(g=>{
+      ${groups.map((g,gi)=>{
         const items = state.todos[trip.id][g]||[];
         const gd = items.filter(t=>t.done).length;
-        return `<div class="card">
+        const gpct = items.length? Math.round(gd/items.length*100):0;
+        const gc = TRIP_COLORS[gi % TRIP_COLORS.length];
+        return `<div class="card" style="border-left:3px solid ${colorVar(gc)};">
           <div class="row-between">
-            <div class="card-title">${g}</div>
-            <span style="font-size:11px; color:var(--text-3);">${gd}/${items.length}</span>
+            <div class="card-title" style="display:flex; align-items:center; gap:7px;"><span style="width:7px;height:7px;border-radius:50%;background:${colorVar(gc)};display:inline-block;"></span>${g}</div>
+            <span style="font-size:11px; color:var(--text-3);" class="num">${gd}/${items.length}</span>
           </div>
+          <div class="mini-progress" style="margin-top:8px;"><div class="mini-progress-fill" style="width:${gpct}%; background:${colorVar(gc)};"></div></div>
           <div style="margin-top:8px;">
             ${items.map(t=>`
               <div class="checklist-row ${t.done?'done':''}">
@@ -2007,11 +2122,14 @@ function renderPacking(root){
     </div>
     <div class="row-between"><div></div><button class="btn btn-outline btn-sm" id="add-cat-btn"><i data-lucide="folder-plus" class="icon"></i>新增分類</button></div>
     <div class="grid grid-2">
-      ${cats.map(c=>{
+      ${cats.map((c,ci)=>{
         const items = state.packing[trip.id][c];
         const gd = items.filter(t=>t.done).length;
-        return `<div class="card">
-          <div class="row-between"><div class="card-title">${escapeHtml(c)}</div><span style="font-size:11px; color:var(--text-3);">${gd}/${items.length}</span></div>
+        const gpct = items.length? Math.round(gd/items.length*100):0;
+        const gc = TRIP_COLORS[(ci+1) % TRIP_COLORS.length];
+        return `<div class="card" style="border-left:3px solid ${colorVar(gc)};">
+          <div class="row-between"><div class="card-title" style="display:flex; align-items:center; gap:7px;"><span style="width:7px;height:7px;border-radius:50%;background:${colorVar(gc)};display:inline-block;"></span>${escapeHtml(c)}</div><span style="font-size:11px; color:var(--text-3);" class="num">${gd}/${items.length}</span></div>
+          <div class="mini-progress" style="margin-top:8px;"><div class="mini-progress-fill" style="width:${gpct}%; background:${colorVar(gc)};"></div></div>
           <div style="margin-top:8px;">
             ${items.map(t=>`
               <div class="checklist-row ${t.done?'done':''}">
