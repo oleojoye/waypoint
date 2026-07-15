@@ -316,6 +316,10 @@ a{color:inherit;}
 }
 @keyframes sheetUp{ from{transform:translateY(24px); opacity:.6;} to{transform:translateY(0); opacity:1;} }
 
+.editable-text{cursor:text; border-bottom:1px dashed transparent; padding-bottom:1px; transition:border-color .15s, background .15s; border-radius:3px;}
+.editable-text:hover, .editable-text:active{border-bottom-color:var(--text-3);}
+.inline-edit-input{width:100%; border:none; border-bottom:1.5px solid var(--blue); background:transparent; font-size:13px; font-family:inherit; padding:2px 0; outline:none; color:var(--text);}
+
 /* ============ Card-list components (avatar / mini progress / chips) ============ */
 .avatar-badge{width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 3px 8px -2px rgba(0,0,0,0.18);}
 .avatar-badge .icon{width:21px; height:21px; color:#fff; stroke-width:2.3px;}
@@ -376,6 +380,9 @@ a{color:inherit;}
 
 @media (max-width:860px){
   .field input,.field select,.field textarea,.contact-field,#global-search,#mobile-global-search{font-size:16px !important;}
+  .icon-btn{width:36px !important; height:36px !important;}
+  .checklist-row .icon-btn{width:34px !important; height:34px !important;}
+  .editable-text{padding:3px 2px; border-bottom-color:var(--border);}
 }
 
 /* ============ Home: colorful trip modules (subscription-app inspired) ============ */
@@ -1448,7 +1455,7 @@ function renderItinItemRow(it, trip){
   const sm = statusMeta(it.status);
   return `<div class="checklist-row itin-row" style="align-items:flex-start;">
     <div class="num" style="width:44px; flex-shrink:0; font-size:12px; color:var(--text-2); padding-top:2px;">${it.time||'--:--'}</div>
-    <div style="flex:1; min-width:0;">
+    <div style="flex:1; min-width:0; cursor:pointer;" data-edit-item="${it.id}">
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
         <span style="font-weight:600; font-size:13px;">${escapeHtml(it.name)}</span>
         <span class="tag ${sm.cls}">${it.status}</span>
@@ -2068,7 +2075,8 @@ function renderTodo(root){
             ${items.map(t=>`
               <div class="checklist-row ${t.done?'done':''}">
                 <div class="checkbox ${t.done?'checked':''}" data-toggle-todo="${g}|${t.id}">${t.done?'<i data-lucide=\"check\" class=\"icon\"></i>':''}</div>
-                <div class="cl-text">${escapeHtml(t.text)}</div>
+                <div class="cl-text editable-text" data-edit-todo="${g}|${t.id}">${escapeHtml(t.text)}</div>
+                <button class="icon-btn" style="width:26px;height:26px;" data-edit-todo="${g}|${t.id}"><i data-lucide="pencil" class="icon" style="width:12px;height:12px;"></i></button>
                 <button class="icon-btn" style="width:26px;height:26px;" data-del-todo="${g}|${t.id}"><i data-lucide="x" class="icon" style="width:12px;height:12px;"></i></button>
               </div>`).join('') || `<div class="es-sub" style="padding:8px 0;">還沒有項目</div>`}
           </div>
@@ -2082,12 +2090,40 @@ function renderTodo(root){
     const t = state.todos[trip.id][g].find(x=>x.id===id); t.done=!t.done;
     persist(true); renderTodo(document.getElementById('view-inner'));
   }));
+  root.querySelectorAll('[data-edit-todo]').forEach(el=> el.addEventListener('click', ()=>{
+    const [g,id] = el.dataset.editTodo.split('|');
+    const t = state.todos[trip.id][g].find(x=>x.id===id);
+    openTextEditModal('編輯待辦事項', t.text, (v)=>{ t.text=v; persist(true); renderTodo(document.getElementById('view-inner')); toast('已更新','check'); });
+  }));
   root.querySelectorAll('[data-del-todo]').forEach(el=> el.addEventListener('click', ()=>{
     const [g,id] = el.dataset.delTodo.split('|');
     state.todos[trip.id][g] = state.todos[trip.id][g].filter(x=>x.id!==id);
     persist(true); renderTodo(document.getElementById('view-inner'));
   }));
   root.querySelectorAll('[data-addtodo]').forEach(el=> el.addEventListener('click', ()=> openTodoAddModal(el.dataset.addtodo)));
+}
+function openBookingEditModal(doc, b, root){
+  const isEdit = !!b;
+  const body = `
+    <div class="field"><label>項目名稱</label><input id="bk-label" value="${escapeHtml(b?.label||'')}" placeholder="例如：飯店訂單編號"></div>
+    <div class="field"><label>編號內容</label><input id="bk-value" value="${escapeHtml(b?.value||'')}"></div>
+  `;
+  openModal({title:isEdit?'編輯訂位編號':'新增訂位編號', body, foot:`<button class="btn btn-outline" data-close>取消</button><button class="btn btn-filled" id="save-bk-btn">${isEdit?'儲存':'新增'}</button>`});
+  document.getElementById('save-bk-btn').addEventListener('click', ()=>{
+    const label = document.getElementById('bk-label').value.trim();
+    const value = document.getElementById('bk-value').value.trim();
+    if(!label){ toast('請輸入項目名稱','alert-triangle'); return; }
+    if(isEdit){ b.label=label; b.value=value; } else { doc.bookingNumbers.push({id:uid('bk'), label, value}); }
+    persist(true); closeModal(); renderDocuments(root); toast('已儲存','check');
+  });
+}
+function openTextEditModal(title, value, onSave){
+  const body = `<div class="field"><label>內容</label><input id="f-quicktext" value="${escapeHtml(value)}"></div>`;
+  openModal({title, body, foot:`<button class="btn btn-outline" data-close>取消</button><button class="btn btn-filled" id="save-quicktext-btn">儲存</button>`});
+  const input = document.getElementById('f-quicktext'); input.focus(); input.select();
+  const save = ()=>{ const v = input.value.trim(); if(!v) return; onSave(v); closeModal(); };
+  document.getElementById('save-quicktext-btn').addEventListener('click', save);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') save(); });
 }
 function openTodoAddModal(group){
   const trip = activeTrip();
@@ -2134,7 +2170,8 @@ function renderPacking(root){
             ${items.map(t=>`
               <div class="checklist-row ${t.done?'done':''}">
                 <div class="checkbox ${t.done?'checked':''}" data-toggle-pack="${c}|${t.id}">${t.done?'<i data-lucide=\"check\" class=\"icon\"></i>':''}</div>
-                <div class="cl-text">${escapeHtml(t.text)}</div>
+                <div class="cl-text editable-text" data-edit-pack="${c}|${t.id}">${escapeHtml(t.text)}</div>
+                <button class="icon-btn" style="width:26px;height:26px;" data-edit-pack="${c}|${t.id}"><i data-lucide="pencil" class="icon" style="width:12px;height:12px;"></i></button>
                 <button class="icon-btn" style="width:26px;height:26px;" data-del-pack="${c}|${t.id}"><i data-lucide="x" class="icon" style="width:12px;height:12px;"></i></button>
               </div>`).join('') || `<div class="es-sub" style="padding:8px 0;">還沒有項目</div>`}
           </div>
@@ -2147,6 +2184,11 @@ function renderPacking(root){
     const [c,id] = el.dataset.togglePack.split('|');
     const t = state.packing[trip.id][c].find(x=>x.id===id); t.done=!t.done;
     persist(true); renderPacking(document.getElementById('view-inner'));
+  }));
+  root.querySelectorAll('[data-edit-pack]').forEach(el=> el.addEventListener('click', ()=>{
+    const [c,id] = el.dataset.editPack.split('|');
+    const t = state.packing[trip.id][c].find(x=>x.id===id);
+    openTextEditModal('編輯行李項目', t.text, (v)=>{ t.text=v; persist(true); renderPacking(document.getElementById('view-inner')); toast('已更新','check'); });
   }));
   root.querySelectorAll('[data-del-pack]').forEach(el=> el.addEventListener('click', ()=>{
     const [c,id] = el.dataset.delPack.split('|');
@@ -2215,7 +2257,7 @@ function renderDocuments(root){
       <div class="row-between"><div class="card-title">訂位編號 / 一鍵複製</div><button class="btn btn-ghost btn-sm" id="add-booking-btn"><i data-lucide="plus" class="icon"></i>新增</button></div>
       <div id="bookings-list" style="margin-top:8px;">${doc.bookingNumbers.map(b=>`
         <div class="checklist-row">
-          <div class="cl-text"><strong>${escapeHtml(b.label)}</strong><div style="font-size:11px;color:var(--text-3)" class="num">${escapeHtml(b.value)}</div></div>
+          <div class="cl-text editable-text" data-edit-booking="${b.id}"><strong>${escapeHtml(b.label)}</strong><div style="font-size:11px;color:var(--text-3)" class="num">${escapeHtml(b.value)}</div></div>
           <button class="btn btn-outline btn-sm" data-copy="${escapeHtml(b.value)}"><i data-lucide="copy" class="icon"></i>複製</button>
           <button class="icon-btn" style="width:28px;height:28px;" data-del-booking="${b.id}"><i data-lucide="trash-2" class="icon" style="width:13px;height:13px;color:var(--red)"></i></button>
         </div>`).join('') || `<div class="es-sub">尚未新增訂位編號</div>`}
@@ -2237,11 +2279,11 @@ function renderDocuments(root){
     const [field,id] = el.dataset.cfield.split('|');
     const c = doc.emergencyContacts.find(x=>x.id===id); c[field]=el.value; persist(true);
   }));
-  root.querySelector('#add-booking-btn').addEventListener('click', ()=>{
-    const label = prompt('項目名稱（例如：飯店訂單編號）：'); if(!label) return;
-    const value = prompt('編號內容：')||'';
-    doc.bookingNumbers.push({id:uid('bk'), label, value}); persist(true); renderDocuments(root);
-  });
+  root.querySelector('#add-booking-btn').addEventListener('click', ()=> openBookingEditModal(doc, null, root));
+  root.querySelectorAll('[data-edit-booking]').forEach(el=> el.addEventListener('click', ()=>{
+    const b = doc.bookingNumbers.find(x=>x.id===el.dataset.editBooking);
+    if(b) openBookingEditModal(doc, b, root);
+  }));
   root.querySelectorAll('[data-del-booking]').forEach(el=> el.addEventListener('click', ()=>{ doc.bookingNumbers = doc.bookingNumbers.filter(b=>b.id!==el.dataset.delBooking); persist(true); renderDocuments(root); }));
   root.querySelectorAll('[data-copy]').forEach(el=> el.addEventListener('click', ()=>{
     navigator.clipboard?.writeText(el.dataset.copy).then(()=>toast('已複製到剪貼簿','copy'));
@@ -2260,7 +2302,7 @@ function renderTransport(root){
     <div class="grid grid-2" id="transport-grid">
       ${list.map(t=>{
         const meta = TRANSPORT_TYPES.find(x=>x.id===t.type) || TRANSPORT_TYPES[0];
-        return `<div class="card">
+        return `<div class="card folder-card" data-card-edit-transport="${t.id}">
           <div class="row-between">
             <div style="display:flex; align-items:center; gap:10px;">
               <div style="width:36px;height:36px;border-radius:10px;background:var(--blue-soft);display:flex;align-items:center;justify-content:center;">
@@ -2287,6 +2329,9 @@ function renderTransport(root){
     </div>
   `;
   root.querySelector('#add-transport-btn').addEventListener('click', ()=>openTransportModal());
+  root.querySelectorAll('[data-card-edit-transport]').forEach(el=>{
+    el.addEventListener('click', (e)=>{ if(e.target.closest('button,a')) return; openTransportModal(list.find(t=>t.id===el.dataset.cardEditTransport)); });
+  });
   root.querySelectorAll('[data-edit-transport]').forEach(el=> el.addEventListener('click', ()=>openTransportModal(list.find(t=>t.id===el.dataset.editTransport))));
   root.querySelectorAll('[data-del-transport]').forEach(el=> el.addEventListener('click', ()=>{
     state.transport[trip.id] = state.transport[trip.id].filter(t=>t.id!==el.dataset.delTransport);
@@ -2340,7 +2385,7 @@ function renderAccommodation(root){
     <div class="row-between"><div class="card-sub" style="font-size:13px;">共 ${list.length} 筆住宿</div><button class="btn btn-filled btn-sm" id="add-acc-btn"><i data-lucide="plus" class="icon"></i>新增住宿</button></div>
     <div class="grid grid-2" id="acc-grid">
       ${list.map(a=>`
-        <div class="card">
+        <div class="card folder-card" data-card-edit-acc="${a.id}">
           <div class="row-between">
             <div style="display:flex; align-items:center; gap:10px;">
               <div style="width:36px;height:36px;border-radius:10px;background:var(--orange-soft);display:flex;align-items:center;justify-content:center;"><i data-lucide="building-2" class="icon" style="color:var(--orange)"></i></div>
@@ -2361,6 +2406,9 @@ function renderAccommodation(root){
     </div>
   `;
   root.querySelector('#add-acc-btn').addEventListener('click', ()=>openAccModal());
+  root.querySelectorAll('[data-card-edit-acc]').forEach(el=>{
+    el.addEventListener('click', (e)=>{ if(e.target.closest('button,a')) return; openAccModal(list.find(a=>a.id===el.dataset.cardEditAcc)); });
+  });
   root.querySelectorAll('[data-edit-acc]').forEach(el=> el.addEventListener('click', ()=>openAccModal(list.find(a=>a.id===el.dataset.editAcc))));
   root.querySelectorAll('[data-del-acc]').forEach(el=> el.addEventListener('click', ()=>{
     state.accommodation[trip.id] = state.accommodation[trip.id].filter(a=>a.id!==el.dataset.delAcc);
